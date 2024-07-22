@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "core", 
+    "nodes/add_node", "nodes/print_node", "nodes/trigger_node",
+]
