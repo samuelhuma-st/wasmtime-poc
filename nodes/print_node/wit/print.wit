@@ -1,0 +1,5 @@
+package component:print;
+
+world example {
+   export execute: func(params: string) -> string;
+}

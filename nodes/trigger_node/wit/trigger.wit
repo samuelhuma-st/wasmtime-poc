@@ -1,0 +1,5 @@
+package component:trigger;
+
+world example {
+   export execute: func() -> string;
+}
