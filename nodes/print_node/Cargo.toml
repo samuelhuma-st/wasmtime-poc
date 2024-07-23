@@ -6,7 +6,18 @@ edition = "2021"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[package.metadata.component]
+package = "component:print-node"
+
+[profile.release]
+codegen-units = 1
+opt-level = "s"
+debug = false
+strip = true
+lto = true
+
 [dependencies]
+wit-bindgen-rt = { version = "0.28.0", features = ["bitflags"] }
 serde = {version = "1.0.203", features = ["derive"]}
 serde_json = "1.0.118"
 anyhow = "1.0.86"

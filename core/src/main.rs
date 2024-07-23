@@ -40,9 +40,9 @@ async fn manual_trigger(
 async fn main() -> std::io::Result<()> {
     let app_data = Arc::new(AppState {
         nodes: Mutex::new(vec![
-           ("add".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasi/release/add_node.wasm".to_string()),
-           ("print".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasi/release/print_node.wasm".to_string()),
-           ("trigger".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasi/release/trigger_node.wasm".to_string())
+           ("add".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/add_node.wasm".to_string()),
+           ("print".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/print_node.wasm".to_string()),
+           ("trigger".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/trigger_node.wasm".to_string())
 
         ]),
     });

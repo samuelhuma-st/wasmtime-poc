@@ -1,17 +1,32 @@
 use std::collections::HashMap;
 
+use component::ResourceTable;
 use serde_json::Value;
-use wasmtime::Engine;
-use wasmtime::Module;
-use wasmtime_wasi::WasiCtxBuilder;
+use wasmtime::component::{Instance, Linker, Val};
+use wasmtime::*;
+use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
 
 use crate::utils::resolve_references;
 use crate::{
     models::WorkflowData,
     utils::{build_dependency_graph, topological_sort},
 };
-use wasmtime::*;
 pub struct WorkflowRunner {}
+
+// wasmtime config
+struct MyState {
+    ctx: WasiCtx,
+    table: ResourceTable,
+}
+
+impl WasiView for MyState {
+    fn ctx(&mut self) -> &mut WasiCtx {
+        &mut self.ctx
+    }
+    fn table(&mut self) -> &mut ResourceTable {
+        &mut self.table
+    }
+}
 
 impl WorkflowRunner {
     pub fn run(workflow_data: &WorkflowData, all_nodes: Vec<(String, String)>) {
@@ -71,61 +86,115 @@ impl WorkflowRunner {
 
                     // execute
                     let module_wasm = std::fs::read(node_box.1.clone()).unwrap();
-                    let module = Module::new(&engine, &module_wasm).unwrap();
+                    // let module = Module::new(&engine, &module_wasm).unwrap();
+                    let module =
+                        wasmtime::component::Component::new(&engine, &module_wasm).unwrap();
 
-                    let wasi = WasiCtxBuilder::new().inherit_stdio().build();
-                    let mut store = Store::new(&engine, wasi);
-
-                    let mut linker = Linker::new(&engine);
-                    wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
-
-                    // Créer une instance du module avec les imports WASI
-                    let instance = linker.instantiate(&mut store, &module).unwrap();
-
-                    //  Allouer de la mémoire pour la chaîne de caractères dans le module WebAssembly
-                    let memory = instance
-                        .get_memory(&mut store, "memory")
-                        .expect("Memory not found");
-
-                    let input_len = value.len();
-                    let ptr = 0x10000; // Adresse arbitraire dans la mémoire WebAssembly
-
-                    // Copier la chaîne de caractères dans la mémoire WebAssembly
-                    memory
-                        .write(&mut store, ptr, value.as_bytes())
-                        .expect("Failed to write to memory");
-                    println!("memo {:?}", memory);
-                    // Appeler la fonction exportée `add`
-                    let add = instance
-                        .get_typed_func::<(i32, i32), i32>(&mut store, "execute")
-                        .unwrap();
-                    let result_ptr = add
-                        .call(&mut store, (ptr as i32, input_len as i32))
-                        .unwrap();
-
-                    // Read the result string from WebAssembly memory
-                    let mut buf = Vec::new();
-                    for i in 0..100 {
-                        // Read up to 100 bytes, assuming the output won't be longer
-                        let byte = memory.data(&store)[result_ptr as usize + i];
-                        if byte == 0 {
-                            break;
-                        } // Null terminator
-                        buf.push(byte);
-                    }
-                    let result_str = String::from_utf8(buf).expect("Invalid UTF-8");
-
-                    println!("Result: {}", result_str);
-
-                    let result_format = result_str.to_string();
-
-                    let output_data: Value = serde_json::from_str(&result_format).unwrap();
-
-                    execution_results.insert(
-                        current_node.name.clone(),
-                        serde_json::from_str(format!("{{\"json\": {output_data}}}").as_str())
-                            .unwrap(),
+                    // Create a WASI context
+                    // let wasi = WasiCtxBuilder::new().inherit_stdio().build();
+                    let mut builder = WasiCtxBuilder::new();
+                    let mut store = wasmtime::Store::new(
+                        &engine,
+                        MyState {
+                            ctx: builder.build(),
+                            table: ResourceTable::new(),
+                        },
                     );
+
+                    // Create a linker and add WASI to the imports
+                    let mut linker = Linker::<MyState>::new(&engine);
+                    wasmtime_wasi::add_to_linker_sync(&mut linker).unwrap();
+
+                    // Instantiate the module with the WASI imports
+                    let instance: Instance = linker.instantiate(&mut store, &module).unwrap();
+
+                    let execute_func = instance.get_func(&mut store, "execute").unwrap();
+
+                    let mut res = [Val::String("".into())];
+                    if node_box.0 == "trigger".to_string() {
+                        execute_func.call(&mut store, &[], &mut res).unwrap();
+                    } else {
+                        execute_func
+                            .call(&mut store, &[Val::String(value.to_string())], &mut res)
+                            .unwrap();
+                    }
+
+                    let a = res.first().unwrap();
+                    if let Val::String(s) = a {
+                        let a_str: &str = &s;
+                        let output_data: Value = serde_json::from_str(a_str).unwrap();
+                        execution_results.insert(
+                            current_node.name.clone(),
+                            serde_json::from_str(format!("{{\"json\": {output_data}}}").as_str())
+                                .unwrap(),
+                        );
+                    }
+
+     
+                    
+                    // let output_data: Value = serde_json::from_str(a).unwrap();
+
+                    // execution_results.insert(
+                    //     current_node.name.clone(),
+                    //     serde_json::from_str(format!("{{\"json\": {output_data}}}").as_str())
+                    //         .unwrap(),
+                    // );
+
+                    println!("Result from hello_world: {:?}", res);
+
+                    // let wasi = WasiCtxBuilder::new().inherit_stdio().build();
+                    // let mut store = Store::new(&engine, wasi);
+
+                    // let mut linker = Linker::new(&engine);
+                    // wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
+
+                    // // Créer une instance du module avec les imports WASI
+                    // let instance = linker.instantiate(&mut store, &module).unwrap();
+
+                    // //  Allouer de la mémoire pour la chaîne de caractères dans le module WebAssembly
+                    // let memory = instance
+                    //     .get_memory(&mut store, "memory")
+                    //     .expect("Memory not found");
+
+                    // let input_len = value.len();
+                    // let ptr = 0x10000; // Adresse arbitraire dans la mémoire WebAssembly
+
+                    // // Copier la chaîne de caractères dans la mémoire WebAssembly
+                    // memory
+                    //     .write(&mut store, ptr, value.as_bytes())
+                    //     .expect("Failed to write to memory");
+                    // println!("memo {:?}", memory);
+                    // // Appeler la fonction exportée `add`
+                    // let add = instance
+                    //     .get_typed_func::<(i32, i32), i32>(&mut store, "execute")
+                    //     .unwrap();
+                    // let result_ptr = add
+                    //     .call(&mut store, (ptr as i32, input_len as i32))
+                    //     .unwrap();
+
+                    // // Read the result string from WebAssembly memory
+                    // let mut buf = Vec::new();
+                    // for i in 0..100 {
+                    //     // Read up to 100 bytes, assuming the output won't be longer
+                    //     let byte = memory.data(&store)[result_ptr as usize + i];
+                    //     if byte == 0 {
+                    //         break;
+                    //     } // Null terminator
+                    //     buf.push(byte);
+                    // }
+                    // let result_str = String::from_utf8(buf).expect("Invalid UTF-8");
+
+                    // println!("Result: {}", result_str);
+
+                    // let result_format = result.0.to_string();
+
+                    // let output_data: Value = serde_json::from_str(&result_format).unwrap();
+
+                    // execution_results.insert(
+                    //     current_node.name.clone(),
+                    //     serde_json::from_str(format!("{{\"json\": {output_data}}}").as_str())
+                    //         .unwrap(),
+                    // );
 
                     println!("execution_results = {execution_results:?}");
                 } else {
