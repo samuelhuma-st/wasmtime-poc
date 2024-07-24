@@ -1,6 +1,5 @@
-use std::{collections::HashMap, sync::Mutex};
 
-use crate::{models::WorkflowData, utils::NodeFunction, workflow_runner::WorkflowRunner};
+use crate::{models::WorkflowData, workflow_runner::WorkflowRunner};
 
 pub struct WorkflowService {}
 

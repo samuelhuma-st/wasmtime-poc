@@ -1,15 +1,10 @@
 use models::WorkflowData;
-use utils::parse_workflow_data;
-use wasmtime::*;
-use wasmtime_wasi::WasiCtxBuilder;
+use utils::collect_wasm_files;
 use workflow_service::WorkflowService;
 
-use std::{
-    fs, sync::{Arc, Mutex}, thread, time::Duration
-};
+use std::sync::{Arc, Mutex};
 
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
-use serde::{Deserialize, Serialize};
 
 mod models;
 mod utils;
@@ -22,7 +17,7 @@ struct AppState {
 }
 
 #[get("/")]
-async fn index(data: web::Data<AppState>, req_body: web::Json<WorkflowData>) -> impl Responder {
+async fn index(_data: web::Data<AppState>, req_body: web::Json<WorkflowData>) -> impl Responder {
     HttpResponse::Ok().body(format!("Started of {}", req_body.0.clone().name))
 }
 #[post("/manual-trigger")]
@@ -38,13 +33,11 @@ async fn manual_trigger(
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let app_data = Arc::new(AppState {
-        nodes: Mutex::new(vec![
-           ("add".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/add_node.wasm".to_string()),
-           ("print".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/print_node.wasm".to_string()),
-           ("trigger".to_string(), "/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug/trigger_node.wasm".to_string())
 
-        ]),
+    let all_nodes = collect_wasm_files("/home/hm-samuel/projects/projets-test/wasmtime-poc/target/wasm32-wasip1/debug");
+    
+    let app_data = Arc::new(AppState {
+        nodes: Mutex::new(all_nodes),
     });
     HttpServer::new(move || {
         App::new()

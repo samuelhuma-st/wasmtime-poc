@@ -1,18 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, fs};
 
 use crate::models::WorkflowData;
-
-pub enum NodeFunction {
-    NoParam(fn() -> String),
-    WithParam(fn(&str) -> String),
-}
-
-pub fn parse_workflow_data(body: &str) -> Result<WorkflowData, Box<dyn Error>> {
-    let workflow_data: WorkflowData = serde_json::from_str(&body)?;
-    Ok(workflow_data)
-}
 
 pub fn resolve_references(
     params: &HashMap<String, Value>,
@@ -29,7 +19,7 @@ pub fn resolve_references(
 
             for (node_id, result) in node_results {
                 value = replace_placeholders(v.to_string().as_str(), node_results);
-               println!("here is value = {value:?}");
+                println!("here is value = {value:?}");
             }
 
             (k.clone(), value)
@@ -52,18 +42,15 @@ pub fn replace_placeholders(input: &str, map: &HashMap<String, Value>) -> String
         if input_chars[i] == '{' && i + 3 < input_chars.len() && &input[i..i + 4] == "{{$(" {
             if let Some(end_idx) = input[i..].find("}}") {
                 let placeholder = &input[i + 4..i + end_idx];
-                println!("placeholder = {placeholder}");
                 let splitted_str: (&str, &str) = placeholder.split_once(").").unwrap();
                 let trimmed = splitted_str.0.trim_matches(&['\"', '\\']);
 
                 let value_path: Vec<&str> = splitted_str.1.split('.').collect();
 
-                println!("trimmed = {trimmed}");
-
                 let x = &map.get(trimmed).unwrap();
                 if let Some(val) = get_value_from_path(x, &value_path) {
                     result.push_str(&val.to_string());
-                   println!("result 👍= {val:?}");
+                    println!("result 👍= {val:?}");
                 }
 
                 i += end_idx + 2; // Move past the end of the placeholder
@@ -153,4 +140,39 @@ pub fn topological_sort(
     } else {
         vec![]
     }
+}
+
+// Collect all node's wasm files
+pub fn collect_wasm_files(dir: &str) -> Vec<(String, String)> {
+    let mut wasm_files: Vec<(String, String)> = Vec::new();
+
+    // Parcourir le répertoire
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if let Some(extension) = path.extension() {
+                    // Vérifier si l'extension est "wasm"
+                    if extension == "wasm" {
+                        if let Some(file_name) = path.file_name() {
+                            if let Some(file_name_str) = file_name.to_str() {
+                                // Vérifier si le fichier se termine par "_node.wasm"
+                                if file_name_str.ends_with("_node.wasm") {
+                                    // Extraire la partie avant le suffixe "_node"
+                                    if let Some(key) = file_name_str.strip_suffix("_node.wasm") {
+                                        wasm_files.push((
+                                            key.to_string(),
+                                            path.to_string_lossy().to_string(),
+                                        ));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    wasm_files
 }
