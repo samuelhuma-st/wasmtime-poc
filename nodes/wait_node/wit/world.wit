@@ -1,0 +1,6 @@
+package component:wait-node;
+
+/// An example world for the component to target.
+world example {
+    export execute: func(params: string) -> string;
+}

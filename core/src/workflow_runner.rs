@@ -134,7 +134,7 @@ impl WorkflowRunner {
 
                     println!("execution_results = {execution_results:?}");
                 } else {
-                    println!("Node type {} not found in all_nodes", current_node.name);
+                    println!("Node type {} not found in all_nodes", current_node.node_type);
                 }
             }
         }

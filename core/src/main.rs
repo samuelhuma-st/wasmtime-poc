@@ -38,9 +38,9 @@ async fn manual_trigger(
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let all_nodes = collect_wasm_files(
-        "/home/rayann/wasmCloud_test/wasmtime-poc/target/wasm32-wasip1/release"
+        "/home/user/rust-wasm-projects/wasmtime-poc/target/wasm32-wasip1/release"
     );
-
+println!("{:?}", all_nodes);
     let app_data = Arc::new(AppState {
         nodes: Mutex::new(all_nodes),
     });
