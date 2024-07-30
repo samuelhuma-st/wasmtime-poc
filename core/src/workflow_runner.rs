@@ -2,26 +2,33 @@ use std::collections::HashMap;
 
 use component::ResourceTable;
 use serde_json::Value;
-use wasmtime::component::{Instance, Linker, Val};
+use wasmtime::component::{ Instance, Linker, Val };
 use wasmtime::*;
-use wasmtime_wasi::{WasiCtx, WasiCtxBuilder, WasiView};
-
+use wasmtime_wasi::{ WasiCtx, WasiCtxBuilder, WasiView };
 use crate::utils::resolve_references;
-use crate::{
-    models::WorkflowData,
-    utils::{build_dependency_graph, topological_sort},
-};
-pub struct WorkflowRunner {}
+use crate::{ models::WorkflowData, utils::{ build_dependency_graph, topological_sort } };
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::WasiHttpView;
 
-// wasmtime config
+pub struct WorkflowRunner {}
 struct MyState {
     ctx: WasiCtx,
     table: ResourceTable,
+    http: WasiHttpCtx,
 }
 
 impl WasiView for MyState {
     fn ctx(&mut self) -> &mut WasiCtx {
         &mut self.ctx
+    }
+    fn table(&mut self) -> &mut ResourceTable {
+        &mut self.table
+    }
+}
+
+impl WasiHttpView for MyState {
+    fn ctx(&mut self) -> &mut WasiHttpCtx {
+        &mut self.http
     }
     fn table(&mut self) -> &mut ResourceTable {
         &mut self.table
@@ -35,10 +42,7 @@ impl WorkflowRunner {
         let graph = build_dependency_graph(workflow_data);
         let sorted_nodes = topological_sort(&workflow_data, &graph);
 
-        let trigger_node = workflow_data
-            .nodes
-            .iter()
-            .find(|&n| n.node_type == "trigger");
+        let trigger_node = workflow_data.nodes.iter().find(|&n| n.node_type == "trigger");
 
         if let None = trigger_node {
             println!("Aucun nœud de type 'trigger' trouvé.");
@@ -73,7 +77,7 @@ impl WorkflowRunner {
                 if let Some(node_box) = all_nodes.iter().find(|x| x.0 == a) {
                     let resolved_params = resolve_references(
                         &current_node.parameters.clone().unwrap(),
-                        &execution_results,
+                        &execution_results
                     );
                     println!("input_data = {resolved_params:?}");
 
@@ -82,24 +86,24 @@ impl WorkflowRunner {
                         None => &"".to_string(),
                     };
 
-                    // runtime with wasmtime
+                    // execute
                     let module_wasm = std::fs::read(node_box.1.clone()).unwrap();
-                    let module =
-                        wasmtime::component::Component::new(&engine, &module_wasm).unwrap();
+                    let module = wasmtime::component::Component
+                        ::new(&engine, &module_wasm)
+                        .unwrap();
 
                     // Create a WASI context
                     let mut builder = WasiCtxBuilder::new();
-                    let mut store = wasmtime::Store::new(
-                        &engine,
-                        MyState {
-                            ctx: builder.build(),
-                            table: ResourceTable::new(),
-                        },
-                    );
+                    let mut store = wasmtime::Store::new(&engine, MyState {
+                        ctx: builder.build(),
+                        table: ResourceTable::new(),
+                        http: WasiHttpCtx::new(),
+                    });
 
                     // Create a linker and add WASI to the imports
                     let mut linker = Linker::<MyState>::new(&engine);
                     wasmtime_wasi::add_to_linker_sync(&mut linker).unwrap();
+                    wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker).unwrap();
 
                     // Instantiate the module with the WASI imports
                     let instance: Instance = linker.instantiate(&mut store, &module).unwrap();
@@ -115,18 +119,18 @@ impl WorkflowRunner {
                             .unwrap();
                     }
 
-                    let res_formatted = res.first().unwrap();
-                    if let Val::String(s) = res_formatted {
-                        let res_formatted_str: &str = &s;
-                        let output_data: Value = serde_json::from_str(res_formatted_str).unwrap();
+                    let a = res.first().unwrap();
+                    if let Val::String(s) = a {
+                        let a_str: &str = &s;
+                        println!("as_str 👍: {:?}", a_str);
+                        let output_data: Value = serde_json::from_str(a_str).unwrap();
                         execution_results.insert(
                             current_node.name.clone(),
-                            serde_json::from_str(format!("{{\"json\": {output_data}}}").as_str())
-                                .unwrap(),
+                            serde_json
+                                ::from_str(format!("{{\"json\": {output_data}}}").as_str())
+                                .unwrap()
                         );
                     }
-
-                    println!("Result from hello_world: {:?}", res);
 
                     println!("execution_results = {execution_results:?}");
                 } else {

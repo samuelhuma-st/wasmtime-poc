@@ -1,0 +1,35 @@
+[package]
+name = "http_node"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+wit-bindgen-rt = { version = "0.28.0", features = ["bitflags"] }
+anyhow = "1.0.86"
+url = "2.2"
+serde = {version = "1.0.203", features = ["derive"]}
+serde_json = "1.0.118"
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+codegen-units = 1
+opt-level = "s"
+debug = false
+strip = true
+lto = true
+
+[package.metadata.component]
+package = "component:http-node"
+
+[package.metadata.component.dependencies]
+
+[package.metadata.component.target.dependencies]
+"wasi:http" = { path = "wit/deps/http" }
+"wasi:random" = { path = "wit/deps/random" }
+"wasi:clocks" = { path = "wit/deps/clocks" }
+"wasi:io" = { path = "wit/deps/io" }
+"wasi:cli" = { path = "wit/deps/cli" }
+"wasi:filesystem" = { path = "wit/deps/filesystem" }
+"wasi:sockets" = { path = "wit/deps/sockets" }
