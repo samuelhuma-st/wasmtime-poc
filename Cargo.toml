@@ -2,5 +2,5 @@
 
 members = [
     "core", 
-    "nodes/add_node", "nodes/http_node", "nodes/print_node", "nodes/trigger_node",
+    "nodes/add_node", "nodes/http_node", "nodes/print_node", "nodes/trigger_node", "nodes/wait_node",
 ]

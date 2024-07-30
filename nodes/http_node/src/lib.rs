@@ -1,13 +1,14 @@
 #[allow(warnings)]
 mod bindings;
-pub mod custom_http;
+mod custom_http;
 
+use std::fmt;
+
+use bindings::{wasi::http::types::Method, Guest};
 use custom_http::send_http_get_request;
+use serde::{Deserialize, Serialize, Serializer};
+use serde::de::{self, Deserializer, Visitor};
 use serde_json::Value;
-use serde::{ Deserialize, Serialize };
-
-use crate::bindings::Guest;
-use bindings::wasi::http::types::Method as WasiMethod;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct QueryParameter {
@@ -15,9 +16,65 @@ struct QueryParameter {
     value: String,
 }
 
+impl<'de> Deserialize<'de> for Method {
+    fn deserialize<D>(deserializer: D) -> Result<Method, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct MethodVisitor;
+
+        impl<'de> Visitor<'de> for MethodVisitor {
+            type Value = Method;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a valid HTTP method")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Method, E>
+            where
+                E: de::Error,
+            {
+                match value.to_uppercase().as_str() {
+                    "GET" => Ok(Method::Get),
+                    "HEAD" => Ok(Method::Head),
+                    "POST" => Ok(Method::Post),
+                    "PUT" => Ok(Method::Put),
+                    "DELETE" => Ok(Method::Delete),
+                    "CONNECT" => Ok(Method::Connect),
+                    "OPTIONS" => Ok(Method::Options),
+                    "TRACE" => Ok(Method::Trace),
+                    "PATCH" => Ok(Method::Patch),
+                    other => Ok(Method::Other(other.to_string())),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(MethodVisitor)
+    }
+}
+impl Serialize for Method {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Method::Get => serializer.serialize_str("GET"),
+            Method::Head => serializer.serialize_str("HEAD"),
+            Method::Post => serializer.serialize_str("POST"),
+            Method::Put => serializer.serialize_str("PUT"),
+            Method::Delete => serializer.serialize_str("DELETE"),
+            Method::Connect => serializer.serialize_str("CONNECT"),
+            Method::Options => serializer.serialize_str("OPTIONS"),
+            Method::Trace => serializer.serialize_str("TRACE"),
+            Method::Patch => serializer.serialize_str("PATCH"),
+            Method::Other(other) => serializer.serialize_str(other),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct InputData {
-    method: MethodString,
+    method: Method,
     url: String,
     headers: Option<Vec<QueryParameter>>,
     body: Option<Value>,
@@ -26,47 +83,7 @@ pub struct InputData {
     between_bytes_timeout: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-struct MethodString {
-    method: String,
-}
-// Implémentation From pour une conversion facile
-impl From<WasiMethod> for MethodString {
-    fn from(method: WasiMethod) -> Self {
-        let method_str = match method {
-            WasiMethod::Get => "Get".to_string(),
-            WasiMethod::Post => "Post".to_string(),
-            WasiMethod::Head => "Head".to_string(),
-            WasiMethod::Put => "Put".to_string(),
-            WasiMethod::Delete => "Delete".to_string(),
-            WasiMethod::Connect => "Connect".to_string(),
-            WasiMethod::Options => "Options".to_string(),
-            WasiMethod::Trace => "Trace".to_string(),
-            WasiMethod::Patch => "Patch".to_string(),
-            WasiMethod::Other(_) => "Other".to_string(),
-        };
-        MethodString { method: method_str }
-    }
-}
-// Implémentation Into pour une conversion facile
-impl Into<WasiMethod> for MethodString {
-    fn into(self) -> WasiMethod {
-        match self.method.as_str() {
-            "Get" => WasiMethod::Get,
-            "Post" => WasiMethod::Post,
-            "Head" => WasiMethod::Head,
-            "Put" => WasiMethod::Put,
-            "Delete" => WasiMethod::Delete,
-            "Connect" => WasiMethod::Connect,
-            "Options" => WasiMethod::Options,
-            "Trace" => WasiMethod::Trace,
-            "Patch" => WasiMethod::Patch,
-            _ => WasiMethod::Other(String::new()),
-        }
-    }
-}
-
-struct HttpRequest;
+struct Component;
 
 #[derive(Debug, serde::Serialize)]
 struct Output {
@@ -74,39 +91,43 @@ struct Output {
     error: Option<String>,
 }
 
-impl Guest for HttpRequest {
+impl Guest for Component {
     fn execute(params: String) -> String {
         let input_data = serde_json::from_str::<InputData>(&params);
-        println!("started");
         if let Ok(data) = input_data {
             match send_http_get_request(data) {
                 Ok(response) => {
+                    println!("HTTP Response Status: {}", response.status);
                     let output_data = Output {
                         data: Some(String::from_utf8_lossy(&response.body).to_string()),
                         error: None,
                     };
 
-                    let output = serde_json::to_value(&output_data).unwrap().to_string();
-                    return output;
+                    return json_to_string(output_data);
                 }
                 Err(e) => {
                     let output_data = Output {
                         data: None,
                         error: Some(format!("Error sending HTTP request: {}", e)),
                     };
-                    let output = serde_json::to_value(&output_data).unwrap().to_string();
-                    return output;
+
+                    return json_to_string(output_data);
                 }
             }
         } else {
             let output_data = Output {
                 data: None,
-                error: Some(String::from("Cannot get input_data")),
+                error: Some("Cannot get output data".to_string()),
             };
-            let output = serde_json::to_value(&output_data).unwrap().to_string();
-            return output;
+
+            return json_to_string(output_data);
         }
     }
 }
 
-bindings::export!(HttpRequest with_types_in bindings);
+fn json_to_string(output_data: Output) -> String {
+    let output = serde_json::to_value(&output_data).unwrap().to_string();
+    output
+}
+
+bindings::export!(Component with_types_in bindings);
