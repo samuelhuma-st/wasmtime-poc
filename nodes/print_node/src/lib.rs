@@ -11,7 +11,7 @@ struct Output {
 }
 
 impl Guest for PrintNode {
-    fn execute(params: String) -> String {
+    fn execute(_params: String) -> String {
         let output_data = Output {
             description: String::from("This node displays a response in your terminal"),
         };

@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub struct Workflow {}
-
 #[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 pub struct Connection {
     pub from: String,  

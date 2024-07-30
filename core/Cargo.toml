@@ -5,8 +5,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-wasmtime = { version = "22.0.0", features = ["component-model"] }
-wasmtime-wasi = "22.0.0"
+wasmtime = { version = "23.0.1", features = ["component-model"] }
+wasmtime-wasi = "23.0.1"
 serde = {version = "1.0.203", features = ["derive"]}
 serde_json = "1.0.118"
 actix-web = "4"
+wasmtime-wasi-http = "23.0.1"

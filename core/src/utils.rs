@@ -17,7 +17,7 @@ pub fn resolve_references(
                 return (k.clone(), v.clone().to_string());
             }
 
-            for (node_id, result) in node_results {
+            for (_node_id, _result) in node_results {
                 value = replace_placeholders(v.to_string().as_str(), node_results);
                 println!("here is value = {value:?}");
             }
